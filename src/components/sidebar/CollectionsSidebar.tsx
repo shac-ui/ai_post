@@ -3,6 +3,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
+import { ImportDialog } from "@/components/import/ImportDialog";
 import { getMethodBadgeColor } from "@/lib/utils";
 import type { Collection, CollectionItem } from "@/types";
 
@@ -168,6 +169,7 @@ export function CollectionsSidebar() {
   const collections = useAppStore((s) => s.collections);
   const createCollection = useAppStore((s) => s.createCollection);
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [name, setName] = useState("");
 
   function handleCreate() {
@@ -182,27 +184,52 @@ export function CollectionsSidebar() {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-3 py-2 border-b border-[#222]">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">集合</span>
-        <Button size="xs" variant="ghost" onClick={() => setModalOpen(true)} title="新建集合">
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-        </Button>
+        <div className="flex items-center gap-0.5">
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={() => setImportOpen(true)}
+            title="导入集合（Postman / APIPost / Apifox / OpenAPI）"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+          </Button>
+          <Button size="xs" variant="ghost" onClick={() => setModalOpen(true)} title="新建集合">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto py-1 px-1">
         {collections.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 text-center px-4">
-            <svg className="w-8 h-8 text-gray-700 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex flex-col items-center justify-center h-40 text-center px-4 gap-2">
+            <svg className="w-8 h-8 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                 d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
             </svg>
             <p className="text-xs text-gray-600">暂无集合</p>
-            <button
-              onClick={() => setModalOpen(true)}
-              className="mt-2 text-xs text-brand-400 hover:text-brand-300"
-            >
-              创建第一个集合
-            </button>
+            <div className="flex flex-col gap-1.5 w-full">
+              <button
+                onClick={() => setModalOpen(true)}
+                className="text-xs text-brand-400 hover:text-brand-300 py-1"
+              >
+                + 创建新集合
+              </button>
+              <button
+                onClick={() => setImportOpen(true)}
+                className="text-xs text-gray-500 hover:text-gray-300 flex items-center justify-center gap-1 py-1"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                导入 Postman / Apifox
+              </button>
+            </div>
           </div>
         ) : (
           collections.map((col) => <CollectionRow key={col.id} col={col} />)
@@ -225,6 +252,8 @@ export function CollectionsSidebar() {
           </div>
         </div>
       </Modal>
+
+      <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
     </div>
   );
 }

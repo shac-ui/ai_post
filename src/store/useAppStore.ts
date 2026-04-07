@@ -75,6 +75,8 @@ interface AppStore extends PersistedState {
   removeFromCollection: (collectionId: string, itemId: string) => void;
   toggleCollectionItem: (collectionId: string, itemId: string) => void;
   openCollectionRequest: (request: RequestConfig) => void;
+  importCollections: (collections: Collection[]) => void;
+  importEnvironments: (environments: Environment[]) => void;
 
   // History
   addToHistory: (entry: HistoryEntry) => void;
@@ -291,6 +293,18 @@ export const useAppStore = create<AppStore>()(
           newTab(request);
         }
       },
+
+      importCollections: (collections) =>
+        set((s) => {
+          s.collections.push(...collections);
+          persist();
+        }),
+
+      importEnvironments: (environments) =>
+        set((s) => {
+          s.environments.push(...environments);
+          persist();
+        }),
 
       // ─── History ─────────────────────────────────────────────────────
       addToHistory: (entry) =>

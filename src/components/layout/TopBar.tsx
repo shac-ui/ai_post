@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { ImportDialog } from "@/components/import/ImportDialog";
 
 export function TopBar() {
   const environments = useAppStore((s) => s.environments);
@@ -10,6 +11,7 @@ export function TopBar() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const newTab = useAppStore((s) => s.newTab);
+  const [importOpen, setImportOpen] = useState(false);
 
   const activeEnv = environments.find((e) => e.id === activeEnvId);
 
@@ -72,6 +74,20 @@ export function TopBar() {
           </Tooltip>
         </div>
 
+        {/* Import */}
+        <Tooltip content="导入 Postman / APIPost / Apifox / OpenAPI" placement="bottom">
+          <button
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-[#1a1a1a] hover:bg-[#222] border border-[#2e2e2e] hover:border-[#3a3a3a] text-gray-400 hover:text-gray-200 text-xs rounded transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            导入
+          </button>
+        </Tooltip>
+
         {/* New Request */}
         <Tooltip content="新建请求 (Ctrl+T)" placement="bottom">
           <button
@@ -85,6 +101,8 @@ export function TopBar() {
           </button>
         </Tooltip>
       </div>
+
+      <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
     </div>
   );
 }
