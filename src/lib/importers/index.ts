@@ -35,11 +35,20 @@ function detectFormat(data: unknown): ImportFormat {
     if (Array.isArray(d.item)) return "postman_v2";
   }
 
-  // Apifox — has apifoxType or exportFormat
+  // Apifox — project export: apifoxProject field, or $schema.app === "apifox"
+  if (d.apifoxProject) return "apifox";
+  if (
+    d.$schema &&
+    typeof d.$schema === "object" &&
+    (d.$schema as Record<string, unknown>).app === "apifox"
+  ) {
+    return "apifox";
+  }
+  // Apifox — collection export: apifoxType or exportFormat
   if (d.apifoxType || (d.exportFormat && String(d.exportFormat).includes("apifox"))) {
     return "apifox";
   }
-  // Apifox also uses apiCollection
+  // Apifox also uses apiCollection (fallback)
   if (d.apiCollection && Array.isArray(d.apiCollection)) {
     return "apifox";
   }
