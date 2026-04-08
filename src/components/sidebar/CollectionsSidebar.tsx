@@ -5,6 +5,14 @@ import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { ImportDialog } from "@/components/import/ImportDialog";
 import { getMethodBadgeColor } from "@/lib/utils";
+import {
+  downloadReqHub,
+  downloadPostman,
+  downloadOpenAPI,
+  downloadAllAsReqHub,
+  EXPORT_FORMAT_INFO,
+  type ExportFormat,
+} from "@/lib/exporters";
 import type { Collection, CollectionItem } from "@/types";
 
 // ─── Count total requests recursively ────────────────────────────────────────
@@ -304,6 +312,7 @@ function ItemRow({ item, collectionId, depth }: ItemRowProps) {
 function CollectionRow({ col }: { col: Collection }) {
   const [expanded, setExpanded] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState(col.name);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -312,6 +321,14 @@ function CollectionRow({ col }: { col: Collection }) {
   const renameCollection = useAppStore((s) => s.renameCollection);
   const newTab = useAppStore((s) => s.newTab);
   const totalRequests = countRequests(col.items);
+
+  function handleExport(fmt: ExportFormat) {
+    if (fmt === "reqhub") downloadReqHub([col]);
+    else if (fmt === "postman") downloadPostman(col);
+    else if (fmt === "openapi") downloadOpenAPI(col);
+    setExportMenuOpen(false);
+    setMenuOpen(false);
+  }
 
   return (
     <>
@@ -362,7 +379,7 @@ function CollectionRow({ col }: { col: Collection }) {
                 {menuOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-                    <div className="absolute right-0 top-full z-50 mt-1 w-36 bg-[#1e1e1e] border border-[#333] rounded shadow-xl">
+                    <div className="absolute right-0 top-full z-50 mt-1 w-44 bg-[#1e1e1e] border border-[#333] rounded shadow-xl">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -383,6 +400,39 @@ function CollectionRow({ col }: { col: Collection }) {
                       >
                         重命名
                       </button>
+                      <div className="border-t border-[#2a2a2a] my-0.5" />
+                      {/* Export submenu */}
+                      <div className="relative">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setExportMenuOpen((v) => !v); }}
+                          className="w-full flex items-center justify-between px-3 py-2 text-xs text-gray-300 hover:bg-white/5"
+                        >
+                          <span className="flex items-center gap-2">
+                            <svg className="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            导出
+                          </span>
+                          <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                        {exportMenuOpen && (
+                          <div className="absolute left-full top-0 ml-1 w-52 bg-[#1e1e1e] border border-[#333] rounded shadow-xl z-50">
+                            {(Object.entries(EXPORT_FORMAT_INFO) as [ExportFormat, typeof EXPORT_FORMAT_INFO[ExportFormat]][]).map(([fmt, info]) => (
+                              <button
+                                key={fmt}
+                                onClick={(e) => { e.stopPropagation(); handleExport(fmt); }}
+                                className="w-full text-left px-3 py-2.5 hover:bg-white/5 transition-colors"
+                              >
+                                <p className="text-xs text-gray-300">{info.label}</p>
+                                <p className="text-[10px] text-gray-600 mt-0.5">{info.desc}</p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <div className="border-t border-[#2a2a2a] my-0.5" />
                       <button
                         onClick={(e) => {
@@ -436,7 +486,20 @@ export function CollectionsSidebar() {
   const createCollection = useAppStore((s) => s.createCollection);
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [exportAllMenuOpen, setExportAllMenuOpen] = useState(false);
   const [name, setName] = useState("");
+
+  function handleExportAll(fmt: ExportFormat) {
+    if (fmt === "reqhub") downloadAllAsReqHub(collections);
+    else {
+      // Export each collection separately for postman/openapi
+      collections.forEach((col) => {
+        if (fmt === "postman") downloadPostman(col);
+        else downloadOpenAPI(col);
+      });
+    }
+    setExportAllMenuOpen(false);
+  }
 
   function handleCreate() {
     if (name.trim()) {
@@ -451,17 +514,55 @@ export function CollectionsSidebar() {
       <div className="flex items-center justify-between px-3 py-2 border-b border-[#222]">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">集合</span>
         <div className="flex items-center gap-0.5">
+          {/* Import */}
           <Button
             size="xs"
             variant="ghost"
             onClick={() => setImportOpen(true)}
-            title="导入集合（Postman / APIPost / Apifox / OpenAPI）"
+            title="导入（Postman / APIPost / Apifox / OpenAPI）"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
             </svg>
           </Button>
+          {/* Export all (only shown when there are collections) */}
+          {collections.length > 0 && (
+            <div className="relative">
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => setExportAllMenuOpen((v) => !v)}
+                title="导出所有集合"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </Button>
+              {exportAllMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setExportAllMenuOpen(false)} />
+                  <div className="absolute right-0 top-full z-50 mt-1 w-56 bg-[#1e1e1e] border border-[#333] rounded shadow-xl">
+                    <p className="px-3 py-2 text-[10px] text-gray-600 border-b border-[#2a2a2a]">
+                      导出全部 {collections.length} 个集合
+                    </p>
+                    {(Object.entries(EXPORT_FORMAT_INFO) as [ExportFormat, typeof EXPORT_FORMAT_INFO[ExportFormat]][]).map(([fmt, info]) => (
+                      <button
+                        key={fmt}
+                        onClick={() => handleExportAll(fmt)}
+                        className="w-full text-left px-3 py-2.5 hover:bg-white/5 transition-colors"
+                      >
+                        <p className="text-xs text-gray-300">{info.label}</p>
+                        <p className="text-[10px] text-gray-600 mt-0.5">{info.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          {/* New collection */}
           <Button size="xs" variant="ghost" onClick={() => setModalOpen(true)} title="新建集合">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

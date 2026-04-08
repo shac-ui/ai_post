@@ -7,15 +7,47 @@ import { parsePostmanCollection, parsePostmanEnvironment } from "./postman";
 import { parseAPIPost } from "./apipost";
 import { parseApifox } from "./apifox";
 import { parseOpenAPI } from "./openapi";
-import type { Environment } from "@/types";
+import type { Environment, Collection } from "@/types";
+import { createId } from "@/lib/utils";
 
 export type { ImportResult, ImportFormat, ImportError };
 
 // ─── Format detection ─────────────────────────────────────────────────────────
 
+/** Parse ReqHub native export */
+function parseReqHub(data: Record<string, unknown>): ImportResult {
+  const raw = data.collections as Collection[];
+  const collections: Collection[] = raw.map((c) => ({
+    ...c,
+    id: createId(), // new id to avoid conflicts
+  }));
+  const requestCount = collections.reduce((acc, col) => {
+    function count(items: Collection["items"]): number {
+      let n = 0;
+      for (const item of items) {
+        if (item.type === "request") n++;
+        if (item.type === "folder" && item.children) n += count(item.children);
+      }
+      return n;
+    }
+    return acc + count(col.items);
+  }, 0);
+
+  return {
+    format: "postman_v21", // closest label
+    collections,
+    environments: [],
+    warnings: [],
+    stats: { requests: requestCount, folders: 0, environments: 0 },
+  };
+}
+
 function detectFormat(data: unknown): ImportFormat {
   if (!data || typeof data !== "object") return "unknown";
   const d = data as Record<string, unknown>;
+
+  // ReqHub native export
+  if (d.__reqhub === "collection-export") return "postman_v21"; // reuse slot, handled before dispatch
 
   // Postman collection
   if (d.info && typeof d.info === "object") {
@@ -88,6 +120,15 @@ export function importFromJson(jsonText: string): ImportResult | ImportError {
     data = JSON.parse(jsonText);
   } catch {
     return { message: "JSON 格式错误，请检查文件内容", hint: "确保文件编码为 UTF-8 且是有效的 JSON" };
+  }
+
+  // ReqHub native format takes priority
+  if (data && typeof data === "object" && (data as Record<string, unknown>).__reqhub === "collection-export") {
+    try {
+      return parseReqHub(data as Record<string, unknown>);
+    } catch (err) {
+      return { message: `ReqHub 格式解析失败：${err instanceof Error ? err.message : String(err)}` };
+    }
   }
 
   const format = detectFormat(data);
