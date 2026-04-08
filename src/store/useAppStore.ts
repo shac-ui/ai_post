@@ -71,6 +71,7 @@ interface AppStore extends PersistedState {
   createCollection: (name: string) => void;
   deleteCollection: (collectionId: string) => void;
   renameCollection: (collectionId: string, name: string) => void;
+  renameCollectionItem: (collectionId: string, itemId: string, name: string) => void;
   addToCollection: (collectionId: string, request: RequestConfig) => void;
   removeFromCollection: (collectionId: string, itemId: string) => void;
   toggleCollectionItem: (collectionId: string, itemId: string) => void;
@@ -284,12 +285,37 @@ export const useAppStore = create<AppStore>()(
           persist();
         }),
 
+      renameCollectionItem: (collectionId, itemId, name) =>
+        set((s) => {
+          const col = s.collections.find((c) => c.id === collectionId);
+          if (!col) return;
+          function renameDeep(items: CollectionItem[]): boolean {
+            for (const item of items) {
+              if (item.id === itemId) {
+                item.name = name;
+                if (item.request) item.request.name = name;
+                return true;
+              }
+              if (item.children && renameDeep(item.children)) return true;
+            }
+            return false;
+          }
+          renameDeep(col.items);
+          persist();
+        }),
+
       toggleCollectionItem: (collectionId, itemId) =>
         set((s) => {
           const col = s.collections.find((c) => c.id === collectionId);
           if (!col) return;
-          const item = col.items.find((i) => i.id === itemId);
-          if (item) item.expanded = !item.expanded;
+          function toggleDeep(items: CollectionItem[]): boolean {
+            for (const item of items) {
+              if (item.id === itemId) { item.expanded = !item.expanded; return true; }
+              if (item.children && toggleDeep(item.children)) return true;
+            }
+            return false;
+          }
+          toggleDeep(col.items);
         }),
 
       openCollectionRequest: (request) => {

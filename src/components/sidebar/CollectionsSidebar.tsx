@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -7,7 +7,7 @@ import { ImportDialog } from "@/components/import/ImportDialog";
 import { getMethodBadgeColor } from "@/lib/utils";
 import type { Collection, CollectionItem } from "@/types";
 
-// ─── Count total requests (including nested) ──────────────────────────────────
+// ─── Count total requests recursively ────────────────────────────────────────
 function countRequests(items: CollectionItem[]): number {
   let n = 0;
   for (const item of items) {
@@ -15,6 +15,113 @@ function countRequests(items: CollectionItem[]): number {
     if (item.type === "folder" && item.children) n += countRequests(item.children);
   }
   return n;
+}
+
+// ─── Inline rename input ──────────────────────────────────────────────────────
+function InlineRenameInput({
+  value,
+  onConfirm,
+  onCancel,
+}: {
+  value: string;
+  onConfirm: (v: string) => void;
+  onCancel: () => void;
+}) {
+  const [val, setVal] = useState(value);
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, []);
+
+  function commit() {
+    const trimmed = val.trim();
+    if (trimmed && trimmed !== value) onConfirm(trimmed);
+    else onCancel();
+  }
+
+  return (
+    <input
+      ref={ref}
+      value={val}
+      onChange={(e) => setVal(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+        if (e.key === "Escape") onCancel();
+        e.stopPropagation();
+      }}
+      onClick={(e) => e.stopPropagation()}
+      className="flex-1 min-w-0 bg-[#2a2a2a] border border-brand-500 rounded px-1.5 py-0.5 text-xs text-gray-200 outline-none"
+    />
+  );
+}
+
+// ─── Confirm dialog ───────────────────────────────────────────────────────────
+interface ConfirmDialogProps {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel = "确认",
+  cancelLabel = "取消",
+  danger = false,
+  onConfirm,
+  onCancel,
+}: ConfirmDialogProps) {
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Enter") onConfirm();
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, onConfirm, onCancel]);
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative z-10 w-full max-w-sm bg-[#1a1a1a] border border-[#2e2e2e] rounded-lg shadow-2xl">
+        <div className="px-4 py-3 border-b border-[#252525]">
+          <h2 className="text-sm font-semibold text-gray-200">{title}</h2>
+        </div>
+        <div className="px-4 py-4">
+          <p className="text-sm text-gray-400 leading-relaxed">{message}</p>
+        </div>
+        <div className="px-4 pb-4 flex gap-2 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 bg-[#2a2a2a] hover:bg-[#333] border border-[#333] rounded transition-colors"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`px-3 py-1.5 text-xs text-white rounded transition-colors ${
+              danger
+                ? "bg-red-600 hover:bg-red-700"
+                : "bg-brand-600 hover:bg-brand-700"
+            }`}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Recursive item row ───────────────────────────────────────────────────────
@@ -28,80 +135,167 @@ interface ItemRowProps {
 function ItemRow({ item, collectionId, depth }: ItemRowProps) {
   const openCollectionRequest = useAppStore((s) => s.openCollectionRequest);
   const removeFromCollection = useAppStore((s) => s.removeFromCollection);
+  const renameCollectionItem = useAppStore((s) => s.renameCollectionItem);
+
   const [expanded, setExpanded] = useState(item.expanded ?? depth < 2);
-  const indent = depth * 12;
+  const [renaming, setRenaming] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const indent = depth * 14;
 
   if (item.type === "request") {
     const method = item.request?.method ?? "GET";
     return (
-      <div
-        className="group flex items-center gap-2 py-1.5 pr-2 hover:bg-white/5 cursor-pointer rounded text-sm"
-        style={{ paddingLeft: `${indent + 8}px` }}
-        onClick={() => item.request && openCollectionRequest(item.request)}
-      >
-        <span
-          className={`text-[10px] font-bold border px-1 py-0.5 rounded flex-shrink-0 ${getMethodBadgeColor(method)}`}
+      <>
+        <div
+          className="group flex items-center gap-2 py-1.5 pr-2 hover:bg-white/5 cursor-pointer rounded text-sm"
+          style={{ paddingLeft: `${indent + 8}px` }}
+          onClick={() => !renaming && item.request && openCollectionRequest(item.request)}
         >
-          {method}
-        </span>
-        <span className="text-gray-300 truncate flex-1 min-w-0">{item.name}</span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            removeFromCollection(collectionId, item.id);
-          }}
-          className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all p-0.5 rounded flex-shrink-0"
-        >
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+          <span
+            className={`text-[10px] font-bold border px-1 py-0.5 rounded flex-shrink-0 ${getMethodBadgeColor(method)}`}
+          >
+            {method}
+          </span>
+
+          {renaming ? (
+            <InlineRenameInput
+              value={item.name}
+              onConfirm={(v) => { renameCollectionItem(collectionId, item.id, v); setRenaming(false); }}
+              onCancel={() => setRenaming(false)}
+            />
+          ) : (
+            <span className="text-gray-300 truncate flex-1 min-w-0 text-xs">{item.name}</span>
+          )}
+
+          {!renaming && (
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
+              {/* Rename */}
+              <button
+                onClick={(e) => { e.stopPropagation(); setRenaming(true); }}
+                className="text-gray-600 hover:text-gray-300 p-0.5 rounded hover:bg-white/10 transition-colors"
+                title="重命名"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+              {/* Delete (with confirm) */}
+              <button
+                onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+                className="text-gray-600 hover:text-red-400 p-0.5 rounded hover:bg-red-500/10 transition-colors"
+                title="删除"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <ConfirmDialog
+          open={confirmDelete}
+          title="删除请求"
+          message={`确定要从集合中删除「${item.name}」吗？此操作不可撤销。`}
+          confirmLabel="删除"
+          danger
+          onConfirm={() => { removeFromCollection(collectionId, item.id); setConfirmDelete(false); }}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      </>
     );
   }
 
   // Folder
   const children = item.children ?? [];
   return (
-    <div>
-      <div
-        className="group flex items-center gap-1.5 py-1.5 pr-2 hover:bg-white/5 cursor-pointer rounded"
-        style={{ paddingLeft: `${indent + 4}px` }}
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <svg
-          className={`w-3 h-3 text-gray-500 transition-transform flex-shrink-0 ${expanded ? "rotate-90" : ""}`}
-          fill="currentColor"
-          viewBox="0 0 24 24"
+    <>
+      <div>
+        <div
+          className="group flex items-center gap-1.5 py-1.5 pr-2 hover:bg-white/5 cursor-pointer rounded"
+          style={{ paddingLeft: `${indent + 4}px` }}
+          onClick={() => !renaming && setExpanded((v) => !v)}
         >
-          <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <svg className="w-3.5 h-3.5 text-yellow-600/70 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-        </svg>
-        <span className="flex-1 text-xs font-medium text-gray-400 truncate min-w-0">{item.name}</span>
-        <span className="text-[10px] text-gray-700 flex-shrink-0">{countRequests(children)}</span>
+          <svg
+            className={`w-3 h-3 text-gray-500 transition-transform flex-shrink-0 ${expanded ? "rotate-90" : ""}`}
+            fill="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <svg className="w-3.5 h-3.5 text-yellow-600/70 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+          </svg>
+
+          {renaming ? (
+            <InlineRenameInput
+              value={item.name}
+              onConfirm={(v) => { renameCollectionItem(collectionId, item.id, v); setRenaming(false); }}
+              onCancel={() => setRenaming(false)}
+            />
+          ) : (
+            <span className="flex-1 text-xs font-medium text-gray-400 truncate min-w-0">{item.name}</span>
+          )}
+
+          {!renaming && (
+            <>
+              <span className="text-[10px] text-gray-700 flex-shrink-0">{countRequests(children)}</span>
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0 ml-0.5">
+                {/* Rename folder */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setRenaming(true); }}
+                  className="text-gray-600 hover:text-gray-300 p-0.5 rounded hover:bg-white/10 transition-colors"
+                  title="重命名文件夹"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+                {/* Delete folder */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+                  className="text-gray-600 hover:text-red-400 p-0.5 rounded hover:bg-red-500/10 transition-colors"
+                  title="删除文件夹"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {expanded && (
+          <div>
+            {children.length === 0 ? (
+              <div style={{ paddingLeft: `${indent + 28}px` }} className="py-1">
+                <span className="text-[10px] text-gray-700">空文件夹</span>
+              </div>
+            ) : (
+              children.map((child) => (
+                <ItemRow key={child.id} item={child} collectionId={collectionId} depth={depth + 1} />
+              ))
+            )}
+          </div>
+        )}
       </div>
 
-      {expanded && children.length > 0 && (
-        <div>
-          {children.map((child) => (
-            <ItemRow
-              key={child.id}
-              item={child}
-              collectionId={collectionId}
-              depth={depth + 1}
-            />
-          ))}
-        </div>
-      )}
-
-      {expanded && children.length === 0 && (
-        <div style={{ paddingLeft: `${indent + 24}px` }} className="py-1">
-          <span className="text-[10px] text-gray-700">空文件夹</span>
-        </div>
-      )}
-    </div>
+      <ConfirmDialog
+        open={confirmDelete}
+        title="删除文件夹"
+        message={`确定要删除文件夹「${item.name}」及其包含的 ${countRequests(children)} 个请求吗？此操作不可撤销。`}
+        confirmLabel="删除"
+        danger
+        onConfirm={() => { removeFromCollection(collectionId, item.id); setConfirmDelete(false); }}
+        onCancel={() => setConfirmDelete(false)}
+      />
+    </>
   );
 }
 
@@ -112,126 +306,126 @@ function CollectionRow({ col }: { col: Collection }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState(col.name);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   const deleteCollection = useAppStore((s) => s.deleteCollection);
   const renameCollection = useAppStore((s) => s.renameCollection);
   const newTab = useAppStore((s) => s.newTab);
   const totalRequests = countRequests(col.items);
 
   return (
-    <div className="mb-0.5">
-      {/* Collection header */}
-      <div
-        className="group flex items-center gap-1 px-2 py-1.5 hover:bg-white/5 rounded cursor-pointer"
-        onClick={() => !renaming && setExpanded((v) => !v)}
-      >
-        <svg
-          className={`w-3 h-3 text-gray-500 transition-transform flex-shrink-0 ${expanded ? "rotate-90" : ""}`}
-          fill="currentColor"
-          viewBox="0 0 24 24"
+    <>
+      <div className="mb-0.5">
+        {/* Collection header */}
+        <div
+          className="group flex items-center gap-1 px-2 py-1.5 hover:bg-white/5 rounded cursor-pointer"
+          onClick={() => !renaming && setExpanded((v) => !v)}
         >
-          <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-
-        {renaming ? (
-          <input
-            autoFocus
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onBlur={() => {
-              if (newName.trim()) renameCollection(col.id, newName.trim());
-              setRenaming(false);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                if (newName.trim()) renameCollection(col.id, newName.trim());
-                setRenaming(false);
-              }
-              if (e.key === "Escape") setRenaming(false);
-            }}
-            onClick={(e) => e.stopPropagation()}
-            className="flex-1 bg-[#2a2a2a] border border-brand-500 rounded px-1.5 py-0.5 text-sm text-gray-200 outline-none"
-          />
-        ) : (
-          <span className="flex-1 text-sm font-semibold text-gray-300 truncate min-w-0">
-            {col.name}
-          </span>
-        )}
-
-        <span className="text-[10px] text-gray-600 flex-shrink-0 mr-0.5">
-          {totalRequests}
-        </span>
-
-        {/* Context menu */}
-        <div className="relative flex-shrink-0">
-          <button
-            onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
-            className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-gray-300 p-0.5 rounded hover:bg-white/5 transition-all"
+          <svg
+            className={`w-3 h-3 text-gray-500 transition-transform flex-shrink-0 ${expanded ? "rotate-90" : ""}`}
+            fill="currentColor"
+            viewBox="0 0 24 24"
           >
-            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-              <circle cx="5" cy="12" r="2" />
-              <circle cx="12" cy="12" r="2" />
-              <circle cx="19" cy="12" r="2" />
-            </svg>
-          </button>
+            <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
 
-          {menuOpen && (
+          {renaming ? (
+            <InlineRenameInput
+              value={col.name}
+              onConfirm={(v) => { renameCollection(col.id, v); setRenaming(false); }}
+              onCancel={() => setRenaming(false)}
+            />
+          ) : (
+            <span className="flex-1 text-sm font-semibold text-gray-300 truncate min-w-0">
+              {col.name}
+            </span>
+          )}
+
+          {!renaming && (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-full z-50 mt-1 w-36 bg-[#1e1e1e] border border-[#333] rounded shadow-xl">
+              <span className="text-[10px] text-gray-600 flex-shrink-0 mr-0.5">
+                {totalRequests}
+              </span>
+
+              <div className="relative flex-shrink-0">
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    newTab({ collectionId: col.id });
-                    setMenuOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-white/5"
+                  onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
+                  className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-gray-300 p-0.5 rounded hover:bg-white/5 transition-all"
                 >
-                  添加请求
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <circle cx="5" cy="12" r="2" />
+                    <circle cx="12" cy="12" r="2" />
+                    <circle cx="19" cy="12" r="2" />
+                  </svg>
                 </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setRenaming(true);
-                    setMenuOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-white/5"
-                >
-                  重命名
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteCollection(col.id);
-                    setMenuOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-red-500/10"
-                >
-                  删除集合
-                </button>
+
+                {menuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                    <div className="absolute right-0 top-full z-50 mt-1 w-36 bg-[#1e1e1e] border border-[#333] rounded shadow-xl">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          newTab({ collectionId: col.id });
+                          setMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-white/5"
+                      >
+                        添加请求
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRenaming(true);
+                          setMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-white/5"
+                      >
+                        重命名
+                      </button>
+                      <div className="border-t border-[#2a2a2a] my-0.5" />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDelete(true);
+                          setMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-red-500/10"
+                      >
+                        删除集合
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </>
           )}
         </div>
+
+        {/* Items */}
+        {expanded && (
+          <div className="px-1">
+            {col.items.length === 0 ? (
+              <p className="text-xs text-gray-700 px-3 py-2">暂无请求</p>
+            ) : (
+              col.items.map((item) => (
+                <ItemRow key={item.id} item={item} collectionId={col.id} depth={0} />
+              ))
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Items */}
-      {expanded && (
-        <div className="px-1">
-          {col.items.length === 0 ? (
-            <p className="text-xs text-gray-700 px-3 py-2">暂无请求</p>
-          ) : (
-            col.items.map((item) => (
-              <ItemRow
-                key={item.id}
-                item={item}
-                collectionId={col.id}
-                depth={0}
-              />
-            ))
-          )}
-        </div>
-      )}
-    </div>
+      <ConfirmDialog
+        open={confirmDelete}
+        title="删除集合"
+        message={`确定要删除集合「${col.name}」及其包含的 ${totalRequests} 个请求吗？此操作不可撤销。`}
+        confirmLabel="删除"
+        danger
+        onConfirm={() => { deleteCollection(col.id); setConfirmDelete(false); }}
+        onCancel={() => setConfirmDelete(false)}
+      />
+    </>
   );
 }
 
