@@ -3,6 +3,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { CollectionsSidebar } from "@/components/sidebar/CollectionsSidebar";
 import { HistorySidebar } from "@/components/sidebar/HistorySidebar";
 import { EnvironmentsSidebar } from "@/components/sidebar/EnvironmentsSidebar";
+import { TeamSidebar } from "@/components/team/TeamSidebar";
 
 export function Sidebar() {
   const sidebarView = useAppStore((s) => s.sidebarView);
@@ -15,6 +16,7 @@ export function Sidebar() {
       {sidebarView === "collections" && <CollectionsSidebar />}
       {sidebarView === "history" && <HistorySidebar />}
       {sidebarView === "environments" && <EnvironmentsSidebar />}
+      {sidebarView === "team" && <TeamSidebar />}
     </div>
   );
 }

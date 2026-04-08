@@ -18,8 +18,13 @@ import type {
   SidebarView,
   HttpMethod,
   SsoConfig,
+  Team,
+  TeamMember,
+  TeamRole,
+  PermissionRule,
+  ShareLink,
 } from "@/types";
-import { DEFAULT_SSO_CONFIG } from "@/types";
+import { DEFAULT_SSO_CONFIG, DEFAULT_TEAM } from "@/types";
 
 // ─── Persisted slices ─────────────────────────────────────────────────────────
 
@@ -29,6 +34,7 @@ interface PersistedState {
   history: HistoryEntry[];
   activeEnvId: string | null;
   ssoConfig: SsoConfig;
+  team: Team;
 }
 
 function loadPersisted(): PersistedState {
@@ -46,6 +52,7 @@ function loadPersisted(): PersistedState {
     history: load<HistoryEntry[]>("history", []),
     activeEnvId: load<string | null>("activeEnvId", null),
     ssoConfig: load<SsoConfig>("ssoConfig", DEFAULT_SSO_CONFIG),
+    team: load<Team>("team", DEFAULT_TEAM),
   };
 }
 
@@ -101,6 +108,17 @@ interface AppStore extends PersistedState {
   // SSO
   updateSsoConfig: (config: Partial<SsoConfig>) => void;
 
+  // Team
+  updateTeamInfo: (info: Partial<Pick<Team, "name" | "description">>) => void;
+  addMember: (member: Omit<TeamMember, "id" | "joinedAt">) => void;
+  updateMember: (memberId: string, update: Partial<TeamMember>) => void;
+  removeMember: (memberId: string) => void;
+  setMemberRole: (memberId: string, role: TeamRole) => void;
+  setMemberPermissions: (memberId: string, permissions: PermissionRule[]) => void;
+  addShareLink: (link: Omit<ShareLink, "id" | "token" | "createdAt" | "usedCount">) => ShareLink;
+  removeShareLink: (linkId: string) => void;
+  incrementShareLinkUse: (linkId: string) => void;
+
   // Derived
   getActiveTab: () => RequestTab | null;
   getActiveEnvironment: () => Environment | null;
@@ -118,6 +136,7 @@ export const useAppStore = create<AppStore>()(
       save("history", s.history.slice(0, 200));
       save("activeEnvId", s.activeEnvId);
       save("ssoConfig", s.ssoConfig);
+      save("team", s.team);
     }
 
     const initialTab = (): RequestTab => {
@@ -446,6 +465,95 @@ export const useAppStore = create<AppStore>()(
       updateSsoConfig: (config) =>
         set((s) => {
           Object.assign(s.ssoConfig, config);
+          persist();
+        }),
+
+      // ─── Team ─────────────────────────────────────────────────────────
+      updateTeamInfo: (info) =>
+        set((s) => {
+          Object.assign(s.team, info);
+          s.team.updatedAt = Date.now();
+          persist();
+        }),
+
+      addMember: (member) =>
+        set((s) => {
+          const id = createId();
+          s.team.members.push({
+            ...member,
+            id,
+            joinedAt: Date.now(),
+          });
+          s.team.updatedAt = Date.now();
+          persist();
+        }),
+
+      updateMember: (memberId, update) =>
+        set((s) => {
+          const m = s.team.members.find((m) => m.id === memberId);
+          if (m) Object.assign(m, update);
+          s.team.updatedAt = Date.now();
+          persist();
+        }),
+
+      removeMember: (memberId) =>
+        set((s) => {
+          // Cannot remove owner
+          const member = s.team.members.find((m) => m.id === memberId);
+          if (!member || member.role === "owner") return;
+          const idx = s.team.members.findIndex((m) => m.id === memberId);
+          if (idx !== -1) s.team.members.splice(idx, 1);
+          s.team.updatedAt = Date.now();
+          persist();
+        }),
+
+      setMemberRole: (memberId, role) =>
+        set((s) => {
+          const m = s.team.members.find((m) => m.id === memberId);
+          if (m && m.role !== "owner") {
+            m.role = role;
+            s.team.updatedAt = Date.now();
+          }
+          persist();
+        }),
+
+      setMemberPermissions: (memberId, permissions) =>
+        set((s) => {
+          const m = s.team.members.find((m) => m.id === memberId);
+          if (m) m.permissions = permissions;
+          s.team.updatedAt = Date.now();
+          persist();
+        }),
+
+      addShareLink: (linkData) => {
+        const token = nanoid(24);
+        const link: ShareLink = {
+          ...linkData,
+          id: createId(),
+          token,
+          createdAt: Date.now(),
+          usedCount: 0,
+        };
+        set((s) => {
+          s.team.shareLinks.push(link);
+          s.team.updatedAt = Date.now();
+          persist();
+        });
+        return link;
+      },
+
+      removeShareLink: (linkId) =>
+        set((s) => {
+          const idx = s.team.shareLinks.findIndex((l) => l.id === linkId);
+          if (idx !== -1) s.team.shareLinks.splice(idx, 1);
+          s.team.updatedAt = Date.now();
+          persist();
+        }),
+
+      incrementShareLinkUse: (linkId) =>
+        set((s) => {
+          const link = s.team.shareLinks.find((l) => l.id === linkId);
+          if (link) link.usedCount++;
           persist();
         }),
 
