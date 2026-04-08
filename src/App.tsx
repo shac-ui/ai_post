@@ -5,6 +5,7 @@ import { ActivityBar } from "@/components/layout/ActivityBar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TabBar } from "@/components/layout/TabBar";
 import { WorkspacePanel } from "@/components/layout/WorkspacePanel";
+import { installSso } from "@/lib/sso";
 
 function WelcomeScreen() {
   const newTab = useAppStore((s) => s.newTab);
@@ -90,6 +91,17 @@ export function App() {
   const tabs = useAppStore((s) => s.tabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
   const newTab = useAppStore((s) => s.newTab);
+  const ssoConfig = useAppStore((s) => s.ssoConfig);
+
+  // Run SSO on startup
+  useEffect(() => {
+    if (ssoConfig.enabled) {
+      installSso(ssoConfig).catch((err) => {
+        console.error("[SSO] startup error:", err);
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount — intentionally not re-running on config change
 
   // Keyboard shortcuts
   useEffect(() => {

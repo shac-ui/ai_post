@@ -151,6 +151,32 @@ export interface Environment {
   updatedAt: number;
 }
 
+// ─── SSO Config ───────────────────────────────────────────────────────────────
+
+export interface SsoConfig {
+  enabled: boolean;
+  casLoginUrl: string;       // CAS 登录地址，例如 https://sso.example.com/cas/login
+  casLogoutUrl: string;      // CAS 登出地址，例如 https://sso.example.com/cas/logout
+  appIndexUrl: string;       // 本应用首页地址（service 参数）
+  tokenApiUrl: string;       // ticket 换 token 的后端接口，例如 /cas/casLogin
+  tokenApiBaseUrl: string;   // token 接口的 baseURL，例如 https://api.example.com
+  tokenField: string;        // 响应中 token 字段路径，例如 data 或 data.token
+  tokenStorage: "localStorage" | "sessionStorage" | "cookie";
+  tokenStorageKey: string;   // 存储 key，例如 Authorization
+}
+
+export const DEFAULT_SSO_CONFIG: SsoConfig = {
+  enabled: false,
+  casLoginUrl: "",
+  casLogoutUrl: "",
+  appIndexUrl: "",
+  tokenApiUrl: "/cas/casLogin",
+  tokenApiBaseUrl: "",
+  tokenField: "data",
+  tokenStorage: "localStorage",
+  tokenStorageKey: "access_token",
+};
+
 // ─── App State Types ──────────────────────────────────────────────────────────
 
 export type SidebarView = "collections" | "history" | "environments";

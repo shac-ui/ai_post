@@ -17,7 +17,9 @@ import type {
   HistoryEntry,
   SidebarView,
   HttpMethod,
+  SsoConfig,
 } from "@/types";
+import { DEFAULT_SSO_CONFIG } from "@/types";
 
 // ─── Persisted slices ─────────────────────────────────────────────────────────
 
@@ -26,6 +28,7 @@ interface PersistedState {
   environments: Environment[];
   history: HistoryEntry[];
   activeEnvId: string | null;
+  ssoConfig: SsoConfig;
 }
 
 function loadPersisted(): PersistedState {
@@ -42,6 +45,7 @@ function loadPersisted(): PersistedState {
     ]),
     history: load<HistoryEntry[]>("history", []),
     activeEnvId: load<string | null>("activeEnvId", null),
+    ssoConfig: load<SsoConfig>("ssoConfig", DEFAULT_SSO_CONFIG),
   };
 }
 
@@ -94,6 +98,9 @@ interface AppStore extends PersistedState {
   addEnvVariable: (envId: string) => void;
   removeEnvVariable: (envId: string, varId: string) => void;
 
+  // SSO
+  updateSsoConfig: (config: Partial<SsoConfig>) => void;
+
   // Derived
   getActiveTab: () => RequestTab | null;
   getActiveEnvironment: () => Environment | null;
@@ -110,6 +117,7 @@ export const useAppStore = create<AppStore>()(
       save("environments", s.environments);
       save("history", s.history.slice(0, 200));
       save("activeEnvId", s.activeEnvId);
+      save("ssoConfig", s.ssoConfig);
     }
 
     const initialTab = (): RequestTab => {
@@ -431,6 +439,13 @@ export const useAppStore = create<AppStore>()(
           if (!env) return;
           const v = env.variables.find((v) => v.id === varId);
           if (v) Object.assign(v, update);
+          persist();
+        }),
+
+      // ─── SSO ─────────────────────────────────────────────────────────
+      updateSsoConfig: (config) =>
+        set((s) => {
+          Object.assign(s.ssoConfig, config);
           persist();
         }),
 

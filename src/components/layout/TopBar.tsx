@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { ImportDialog } from "@/components/import/ImportDialog";
+import { Modal } from "@/components/ui/Modal";
+import { SsoSettings } from "@/components/settings/SsoSettings";
 
 export function TopBar() {
   const environments = useAppStore((s) => s.environments);
@@ -12,6 +14,8 @@ export function TopBar() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const newTab = useAppStore((s) => s.newTab);
   const [importOpen, setImportOpen] = useState(false);
+  const [ssoOpen, setSsoOpen] = useState(false);
+  const ssoConfig = useAppStore((s) => s.ssoConfig);
 
   const activeEnv = environments.find((e) => e.id === activeEnvId);
 
@@ -102,7 +106,35 @@ export function TopBar() {
         </Tooltip>
       </div>
 
+      {/* SSO Settings button */}
+        <Tooltip content="SSO 单点登录设置" placement="bottom">
+          <button
+            onClick={() => setSsoOpen(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded transition-colors border ${
+              ssoConfig.enabled
+                ? "bg-brand-600/15 border-brand-500/40 text-brand-400 hover:bg-brand-600/25"
+                : "bg-[#1a1a1a] border-[#2e2e2e] text-gray-500 hover:text-gray-200 hover:bg-[#222] hover:border-[#3a3a3a]"
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+            SSO
+            {ssoConfig.enabled && <span className="w-1.5 h-1.5 rounded-full bg-green-400" />}
+          </button>
+        </Tooltip>
+
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
+
+      <Modal
+        open={ssoOpen}
+        onClose={() => setSsoOpen(false)}
+        title="SSO / CAS 单点登录设置"
+        width="max-w-lg"
+      >
+        <SsoSettings onClose={() => setSsoOpen(false)} />
+      </Modal>
     </div>
   );
 }
