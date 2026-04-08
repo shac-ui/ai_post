@@ -271,8 +271,16 @@ export const useAppStore = create<AppStore>()(
         set((s) => {
           const col = s.collections.find((c) => c.id === collectionId);
           if (!col) return;
-          const idx = col.items.findIndex((i) => i.id === itemId);
-          if (idx !== -1) col.items.splice(idx, 1);
+          // Recursive remove — works for both flat and nested structures
+          function removeDeep(items: CollectionItem[]): boolean {
+            const idx = items.findIndex((i) => i.id === itemId);
+            if (idx !== -1) { items.splice(idx, 1); return true; }
+            for (const item of items) {
+              if (item.children && removeDeep(item.children)) return true;
+            }
+            return false;
+          }
+          removeDeep(col.items);
           persist();
         }),
 

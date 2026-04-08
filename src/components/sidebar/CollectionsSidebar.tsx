@@ -7,44 +7,105 @@ import { ImportDialog } from "@/components/import/ImportDialog";
 import { getMethodBadgeColor } from "@/lib/utils";
 import type { Collection, CollectionItem } from "@/types";
 
-function RequestItem({
-  item,
-  collectionId,
-}: {
+// ─── Count total requests (including nested) ──────────────────────────────────
+function countRequests(items: CollectionItem[]): number {
+  let n = 0;
+  for (const item of items) {
+    if (item.type === "request") n++;
+    if (item.type === "folder" && item.children) n += countRequests(item.children);
+  }
+  return n;
+}
+
+// ─── Recursive item row ───────────────────────────────────────────────────────
+
+interface ItemRowProps {
   item: CollectionItem;
   collectionId: string;
-}) {
+  depth: number;
+}
+
+function ItemRow({ item, collectionId, depth }: ItemRowProps) {
   const openCollectionRequest = useAppStore((s) => s.openCollectionRequest);
   const removeFromCollection = useAppStore((s) => s.removeFromCollection);
+  const [expanded, setExpanded] = useState(item.expanded ?? depth < 2);
+  const indent = depth * 12;
 
-  if (!item.request) return null;
-  const method = item.request.method;
+  if (item.type === "request") {
+    const method = item.request?.method ?? "GET";
+    return (
+      <div
+        className="group flex items-center gap-2 py-1.5 pr-2 hover:bg-white/5 cursor-pointer rounded text-sm"
+        style={{ paddingLeft: `${indent + 8}px` }}
+        onClick={() => item.request && openCollectionRequest(item.request)}
+      >
+        <span
+          className={`text-[10px] font-bold border px-1 py-0.5 rounded flex-shrink-0 ${getMethodBadgeColor(method)}`}
+        >
+          {method}
+        </span>
+        <span className="text-gray-300 truncate flex-1 min-w-0">{item.name}</span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            removeFromCollection(collectionId, item.id);
+          }}
+          className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all p-0.5 rounded flex-shrink-0"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
 
+  // Folder
+  const children = item.children ?? [];
   return (
-    <div
-      className="group flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 cursor-pointer rounded mx-1 text-sm"
-      onClick={() => openCollectionRequest(item.request!)}
-    >
-      <span
-        className={`text-[10px] font-bold border px-1 py-0.5 rounded ${getMethodBadgeColor(method)} flex-shrink-0`}
+    <div>
+      <div
+        className="group flex items-center gap-1.5 py-1.5 pr-2 hover:bg-white/5 cursor-pointer rounded"
+        style={{ paddingLeft: `${indent + 4}px` }}
+        onClick={() => setExpanded((v) => !v)}
       >
-        {method}
-      </span>
-      <span className="text-gray-300 truncate flex-1">{item.name}</span>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          removeFromCollection(collectionId, item.id);
-        }}
-        className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all p-0.5 rounded"
-      >
-        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        <svg
+          className={`w-3 h-3 text-gray-500 transition-transform flex-shrink-0 ${expanded ? "rotate-90" : ""}`}
+          fill="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-      </button>
+        <svg className="w-3.5 h-3.5 text-yellow-600/70 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+        </svg>
+        <span className="flex-1 text-xs font-medium text-gray-400 truncate min-w-0">{item.name}</span>
+        <span className="text-[10px] text-gray-700 flex-shrink-0">{countRequests(children)}</span>
+      </div>
+
+      {expanded && children.length > 0 && (
+        <div>
+          {children.map((child) => (
+            <ItemRow
+              key={child.id}
+              item={child}
+              collectionId={collectionId}
+              depth={depth + 1}
+            />
+          ))}
+        </div>
+      )}
+
+      {expanded && children.length === 0 && (
+        <div style={{ paddingLeft: `${indent + 24}px` }} className="py-1">
+          <span className="text-[10px] text-gray-700">空文件夹</span>
+        </div>
+      )}
     </div>
   );
 }
+
+// ─── Collection row ───────────────────────────────────────────────────────────
 
 function CollectionRow({ col }: { col: Collection }) {
   const [expanded, setExpanded] = useState(true);
@@ -54,9 +115,11 @@ function CollectionRow({ col }: { col: Collection }) {
   const deleteCollection = useAppStore((s) => s.deleteCollection);
   const renameCollection = useAppStore((s) => s.renameCollection);
   const newTab = useAppStore((s) => s.newTab);
+  const totalRequests = countRequests(col.items);
 
   return (
-    <div className="mb-1">
+    <div className="mb-0.5">
+      {/* Collection header */}
       <div
         className="group flex items-center gap-1 px-2 py-1.5 hover:bg-white/5 rounded cursor-pointer"
         onClick={() => !renaming && setExpanded((v) => !v)}
@@ -89,16 +152,17 @@ function CollectionRow({ col }: { col: Collection }) {
             className="flex-1 bg-[#2a2a2a] border border-brand-500 rounded px-1.5 py-0.5 text-sm text-gray-200 outline-none"
           />
         ) : (
-          <span className="flex-1 text-sm font-medium text-gray-300 truncate">
+          <span className="flex-1 text-sm font-semibold text-gray-300 truncate min-w-0">
             {col.name}
           </span>
         )}
 
-        <span className="text-[10px] text-gray-600 flex-shrink-0">
-          {col.items.length}
+        <span className="text-[10px] text-gray-600 flex-shrink-0 mr-0.5">
+          {totalRequests}
         </span>
 
-        <div className="relative">
+        {/* Context menu */}
+        <div className="relative flex-shrink-0">
           <button
             onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
             className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-gray-300 p-0.5 rounded hover:bg-white/5 transition-all"
@@ -150,13 +214,19 @@ function CollectionRow({ col }: { col: Collection }) {
         </div>
       </div>
 
+      {/* Items */}
       {expanded && (
-        <div className="ml-2">
+        <div className="px-1">
           {col.items.length === 0 ? (
-            <p className="text-xs text-gray-600 px-4 py-2">暂无请求</p>
+            <p className="text-xs text-gray-700 px-3 py-2">暂无请求</p>
           ) : (
             col.items.map((item) => (
-              <RequestItem key={item.id} item={item} collectionId={col.id} />
+              <ItemRow
+                key={item.id}
+                item={item}
+                collectionId={col.id}
+                depth={0}
+              />
             ))
           )}
         </div>
@@ -164,6 +234,8 @@ function CollectionRow({ col }: { col: Collection }) {
     </div>
   );
 }
+
+// ─── Main sidebar ─────────────────────────────────────────────────────────────
 
 export function CollectionsSidebar() {
   const collections = useAppStore((s) => s.collections);
@@ -204,7 +276,7 @@ export function CollectionsSidebar() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-1 px-1">
+      <div className="flex-1 overflow-y-auto py-1">
         {collections.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 text-center px-4 gap-2">
             <svg className="w-8 h-8 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
